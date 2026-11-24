@@ -1,88 +1,88 @@
 import 'dart:async';
-import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:uuid/uuid.dart';
 import '../models/location_record.dart';
 
-enum TrackingMode {
-  /// Real GPS device updates with foreground notification support.
-  realGps,
-
-  /// Realistic simulated movements (great for testing, CI, emulators).
-  simulated,
-}
-
-/// Provides GPS position updates from real device hardware or a realistic simulator.
+/// Provides real GPS position updates from device hardware via [Geolocator].
+///
+/// Configured for continuous tracking:
+/// - Android: High accuracy + Foreground notification service for background tracking.
+/// - iOS: High accuracy + Background location indicator.
 class LocationService {
-  static const Duration simulatedInterval = Duration(seconds: 3);
-
   final _uuid = const Uuid();
-  final _random = Random();
 
   StreamController<LocationRecord>? _controller;
-  Timer? _timer;
-  StreamSubscription<Position>? _realPositionSub;
+  StreamSubscription<Position>? _gpsSubscription;
 
-  TrackingMode mode = TrackingMode.simulated;
+  bool get isTracking => _gpsSubscription != null;
 
-  // Seed coordinates (Bengaluru, India or current known location)
-  double _lat = 12.9716;
-  double _lng = 77.5946;
+  /// Check whether hardware GPS / location services are turned on on the device.
+  Future<bool> isLocationServiceEnabled() async {
+    return Geolocator.isLocationServiceEnabled();
+  }
 
-  bool get isTracking =>
-      (_timer != null && _timer!.isActive) || _realPositionSub != null;
+  /// Direct the user to enable device GPS if switched off.
+  Future<bool> openLocationSettings() async {
+    return Geolocator.openLocationSettings();
+  }
 
-  /// Starts streaming [LocationRecord]s.
-  /// If [mode] is [TrackingMode.realGps], attempts to listen to real GPS updates.
-  /// If real GPS is unavailable or fails, gracefully falls back to simulated.
-  Stream<LocationRecord> startTracking({TrackingMode? targetMode}) {
-    if (targetMode != null) mode = targetMode;
-
+  /// Streams real [LocationRecord] updates directly from device GPS hardware.
+  Stream<LocationRecord> startTracking() {
     if (_controller != null && !_controller!.isClosed) {
       return _controller!.stream;
     }
 
     _controller = StreamController<LocationRecord>.broadcast();
-
-    if (mode == TrackingMode.realGps) {
-      _startRealGpsTracking();
-    } else {
-      _startSimulatedTracking();
-    }
+    _startGpsStream();
 
     return _controller!.stream;
   }
 
-  void _startSimulatedTracking() {
-    _timer?.cancel();
-    _timer = Timer.periodic(simulatedInterval, (_) {
-      if (_controller == null || _controller!.isClosed) return;
-      _controller!.add(_generateRecord());
-    });
-  }
-
-  Future<void> _startRealGpsTracking() async {
+  Future<void> _startGpsStream() async {
     try {
       final isEnabled = await Geolocator.isLocationServiceEnabled();
       if (!isEnabled) {
-        // Fallback to simulated if device GPS is switched off
-        _startSimulatedTracking();
+        if (_controller != null && !_controller!.isClosed) {
+          _controller!.addError(
+            const LocationServiceDisabledException(),
+          );
+        }
         return;
       }
 
-      // Configure foreground service notification for background tracking on Android
-      const locationSettings = LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 5, // update every 5 meters
-      );
+      LocationSettings locationSettings;
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        locationSettings = AndroidSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 3, // Emits update every 3 meters of movement
+          intervalDuration: const Duration(seconds: 3),
+          foregroundNotificationConfig: const ForegroundNotificationConfig(
+            notificationTitle: 'TrackDrive Active',
+            notificationText: 'Real-time GPS tracking active in background',
+            enableWakeLock: true,
+          ),
+        );
+      } else if (defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.macOS) {
+        locationSettings = AppleSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 3,
+          pauseLocationUpdatesAutomatically: false,
+          showBackgroundLocationIndicator: true,
+        );
+      } else {
+        locationSettings = const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 3,
+        );
+      }
 
-      _realPositionSub = Geolocator.getPositionStream(
+      _gpsSubscription = Geolocator.getPositionStream(
         locationSettings: locationSettings,
       ).listen(
         (Position pos) {
           if (_controller == null || _controller!.isClosed) return;
-          _lat = pos.latitude;
-          _lng = pos.longitude;
 
           final record = LocationRecord(
             id: _uuid.v4(),
@@ -95,39 +95,22 @@ class LocationService {
           _controller!.add(record);
         },
         onError: (err) {
-          // If real GPS throws, continue with simulated to avoid dropping tracking
-          _startSimulatedTracking();
+          if (_controller != null && !_controller!.isClosed) {
+            _controller!.addError(err);
+          }
         },
       );
-    } catch (_) {
-      _startSimulatedTracking();
+    } catch (e) {
+      if (_controller != null && !_controller!.isClosed) {
+        _controller!.addError(e);
+      }
     }
   }
 
   void stopTracking() {
-    _timer?.cancel();
-    _timer = null;
-    _realPositionSub?.cancel();
-    _realPositionSub = null;
+    _gpsSubscription?.cancel();
+    _gpsSubscription = null;
     _controller?.close();
     _controller = null;
-  }
-
-  LocationRecord _generateRecord() {
-    // Simulate realistic driving movement delta
-    _lat += (_random.nextDouble() - 0.5) * 0.0004;
-    _lng += (_random.nextDouble() - 0.5) * 0.0004;
-
-    final speed = _random.nextDouble() * 15; // 0–15 m/s (~0–54 km/h)
-    final accuracy = 3.0 + _random.nextDouble() * 7; // 3–10 m
-
-    return LocationRecord(
-      id: _uuid.v4(),
-      latitude: double.parse(_lat.toStringAsFixed(6)),
-      longitude: double.parse(_lng.toStringAsFixed(6)),
-      accuracy: double.parse(accuracy.toStringAsFixed(1)),
-      speed: double.parse(speed.toStringAsFixed(2)),
-      timestamp: DateTime.now(),
-    );
   }
 }

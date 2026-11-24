@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/tracking_provider.dart';
-import '../services/location_service.dart';
 import '../widgets/status_badge.dart';
 import '../widgets/location_card.dart';
 import '../widgets/stats_row.dart';
@@ -77,9 +76,9 @@ class _Body extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Mode & Permission Bar ─────────────────────────────────────────
+          // ── Real GPS & Permission Status Bar ──────────────────────────────
           Consumer<TrackingProvider>(
-            builder: (_, p, __) => _PermissionAndModeBar(provider: p),
+            builder: (_, p, __) => _GpsStatusBar(provider: p),
           ),
           const SizedBox(height: 16),
 
@@ -130,10 +129,10 @@ class _Body extends StatelessWidget {
   }
 }
 
-class _PermissionAndModeBar extends StatelessWidget {
+class _GpsStatusBar extends StatelessWidget {
   final TrackingProvider provider;
 
-  const _PermissionAndModeBar({required this.provider});
+  const _GpsStatusBar({required this.provider});
 
   @override
   Widget build(BuildContext context) {
@@ -148,29 +147,31 @@ class _PermissionAndModeBar extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.tune, color: Colors.white70, size: 16),
+              const Icon(Icons.satellite_alt, color: Color(0xFF00C896), size: 16),
               const SizedBox(width: 8),
               const Text(
-                'Mode:',
+                'Source: Live Device GPS',
                 style: TextStyle(
-                  color: Colors.white70,
+                  color: Colors.white,
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const Spacer(),
-              _ModeChip(
-                label: 'Simulated',
-                icon: Icons.alt_route,
-                isSelected: provider.trackingMode == TrackingMode.simulated,
-                onTap: () => provider.setTrackingMode(TrackingMode.simulated),
-              ),
-              const SizedBox(width: 8),
-              _ModeChip(
-                label: 'Real GPS',
-                icon: Icons.gps_fixed,
-                isSelected: provider.trackingMode == TrackingMode.realGps,
-                onTap: () => provider.setTrackingMode(TrackingMode.realGps),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00C896).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  'HIGH ACCURACY',
+                  style: TextStyle(
+                    color: Color(0xFF00C896),
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ],
           ),
@@ -227,58 +228,6 @@ class _PermissionAndModeBar extends StatelessWidget {
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _ModeChip extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _ModeChip({
-    required this.label,
-    required this.icon,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? const Color(0xFF00C896).withValues(alpha: 0.2)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSelected ? const Color(0xFF00C896) : Colors.white24,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 13,
-              color: isSelected ? const Color(0xFF00C896) : Colors.white54,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? Colors.white : Colors.white54,
-                fontSize: 11,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

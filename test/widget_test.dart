@@ -64,6 +64,5 @@ void main() {
     expect(find.text('Location Permission Required'), findsOneWidget);
     expect(find.text('Location access is necessary to continue'), findsOneWidget);
     expect(find.text('Grant Location Permission'), findsOneWidget);
-    expect(find.text('Continue with Simulated GPS (Demo Mode)'), findsOneWidget);
   });
 }

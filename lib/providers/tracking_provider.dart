@@ -39,7 +39,6 @@ class TrackingProvider extends ChangeNotifier {
   bool _hasForegroundPermission = false;
   bool _hasBackgroundPermission = false;
   bool _isPermanentlyDenied = false;
-  TrackingMode _trackingMode = TrackingMode.simulated;
 
   LocationRecord? _latestRecord;
   final List<LocationRecord> _recentRecords = [];
@@ -60,7 +59,6 @@ class TrackingProvider extends ChangeNotifier {
   bool get isLocationPermissionRequired =>
       _permissionChecked && !_hasForegroundPermission;
 
-  TrackingMode get trackingMode => _trackingMode;
   LocationRecord? get latestRecord => _latestRecord;
   List<LocationRecord> get recentRecords => List.unmodifiable(_recentRecords);
   List<LocationRecord> get routeHistory => List.unmodifiable(_routeHistory);
@@ -167,49 +165,38 @@ class TrackingProvider extends ChangeNotifier {
     await _permissionService.openSettings();
   }
 
-  /// Bypass permission requirement for simulator / test environment
-  void continueWithSimulator() {
-    _hasForegroundPermission = true;
-    _trackingMode = TrackingMode.simulated;
-    _addLog('🧪 Continuing with Simulated GPS.');
-    notifyListeners();
-  }
-
-  void setTrackingMode(TrackingMode mode) {
-    if (_trackingMode == mode) return;
-    _trackingMode = mode;
-    _addLog('⚙️ Mode set to: ${mode == TrackingMode.realGps ? "Real GPS" : "Simulated GPS"}');
-    if (_isTracking) {
-      stopTracking();
-      startTracking();
-    } else {
-      notifyListeners();
-    }
-  }
-
   // ── Tracking control ────────────────────────────────────────────────────────
 
   Future<void> startTracking() async {
     if (_isTracking) return;
 
-    // If using Real GPS, request permissions first if not yet granted
-    if (_trackingMode == TrackingMode.realGps && !_hasForegroundPermission) {
+    // Verify location permissions
+    if (!_hasForegroundPermission) {
       await requestPermissions();
       if (!_hasForegroundPermission) {
-        _addLog('❌ Cannot start real GPS tracking without location permission.');
+        _addLog('❌ Cannot start tracking without location permission.');
         return;
       }
     }
 
+    // Check if hardware GPS is enabled
+    final isGpsOn = await _locationService.isLocationServiceEnabled();
+    if (!isGpsOn) {
+      _addLog('⚠️ Device GPS is turned off. Opening location settings…');
+      await _locationService.openLocationSettings();
+      return;
+    }
+
     _isTracking = true;
-    _addLog('▶ Tracking started (${_trackingMode == TrackingMode.realGps ? "Real GPS" : "Simulated"}).');
+    _addLog('▶ Real GPS tracking started.');
     notifyListeners();
 
-    _locationSub = _locationService
-        .startTracking(targetMode: _trackingMode)
-        .listen(
+    _locationSub = _locationService.startTracking().listen(
       _onLocationUpdate,
-      onError: (e) => _addLog('❌ Location error: $e'),
+      onError: (e) {
+        _addLog('❌ Real GPS error: $e');
+        stopTracking();
+      },
     );
   }
 

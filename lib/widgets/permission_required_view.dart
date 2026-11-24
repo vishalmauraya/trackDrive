@@ -140,7 +140,7 @@ class PermissionRequiredView extends StatelessWidget {
                 const SizedBox(height: 20),
               ],
 
-              // Action Buttons
+              // Action Button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -168,17 +168,6 @@ class PermissionRequiredView extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 10),
-
-              // Simulation fallback option
-              TextButton.icon(
-                onPressed: provider.continueWithSimulator,
-                icon: const Icon(Icons.alt_route, size: 16, color: Colors.white54),
-                label: const Text(
-                  'Continue with Simulated GPS (Demo Mode)',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
                 ),
               ),
             ],
