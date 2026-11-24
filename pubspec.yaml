@@ -1,0 +1,39 @@
+name: track_drive
+description: Driver Location Tracking & Offline Synchronization Assessment
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  provider: ^6.1.2
+
+  # Local database
+  sqflite: ^2.3.3+1
+  path: ^1.9.0
+
+  # HTTP client
+  http: ^1.2.2
+
+  # Connectivity detection
+  connectivity_plus: ^6.1.4
+
+  # UUID generation for unique record IDs
+  uuid: ^4.4.2
+
+  # Icons
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  sqflite_common_ffi: ^2.3.4+1
+
+flutter:
+  uses-material-design: true
