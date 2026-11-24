@@ -5,6 +5,7 @@ import '../services/location_service.dart';
 import '../services/database_service.dart';
 import '../services/connectivity_service.dart';
 import '../services/sync_service.dart';
+import '../services/permission_service.dart';
 
 /// Central state manager for the tracking screen.
 ///
@@ -15,24 +16,32 @@ class TrackingProvider extends ChangeNotifier {
   final DatabaseService _databaseService;
   final ConnectivityService _connectivityService;
   final SyncService _syncService;
+  final PermissionService _permissionService;
 
   TrackingProvider({
     required LocationService locationService,
     required DatabaseService databaseService,
     required ConnectivityService connectivityService,
     required SyncService syncService,
+    PermissionService? permissionService,
   })  : _locationService = locationService,
         _databaseService = databaseService,
         _connectivityService = connectivityService,
-        _syncService = syncService;
+        _syncService = syncService,
+        _permissionService = permissionService ?? PermissionService();
 
   // ── State ───────────────────────────────────────────────────────────────────
 
   bool _isTracking = false;
   bool _isOnline = false;
   bool _isSyncing = false;
+  bool _hasForegroundPermission = false;
+  bool _hasBackgroundPermission = false;
+  TrackingMode _trackingMode = TrackingMode.simulated;
+
   LocationRecord? _latestRecord;
   final List<LocationRecord> _recentRecords = [];
+  final List<LocationRecord> _routeHistory = [];
   final List<String> _logs = [];
   int _pendingCount = 0;
   int _syncedCount = 0;
@@ -42,8 +51,12 @@ class TrackingProvider extends ChangeNotifier {
   bool get isTracking => _isTracking;
   bool get isOnline => _isOnline;
   bool get isSyncing => _isSyncing;
+  bool get hasForegroundPermission => _hasForegroundPermission;
+  bool get hasBackgroundPermission => _hasBackgroundPermission;
+  TrackingMode get trackingMode => _trackingMode;
   LocationRecord? get latestRecord => _latestRecord;
   List<LocationRecord> get recentRecords => List.unmodifiable(_recentRecords);
+  List<LocationRecord> get routeHistory => List.unmodifiable(_routeHistory);
   List<String> get logs => List.unmodifiable(_logs);
   int get pendingCount => _pendingCount;
   int get syncedCount => _syncedCount;
@@ -57,6 +70,15 @@ class TrackingProvider extends ChangeNotifier {
 
   Future<void> init() async {
     _isOnline = await _connectivityService.isCurrentlyOnline();
+    await checkPermissions();
+
+    // Load existing history from DB for polyline display
+    final existing = await _databaseService.getAllRecords(limit: 500);
+    _routeHistory.clear();
+    _routeHistory.addAll(existing.reversed);
+    if (_routeHistory.isNotEmpty) {
+      _latestRecord = _routeHistory.last;
+    }
 
     // Wire sync-service logs into our log list.
     _syncService.onLog = (msg) {
@@ -82,15 +104,75 @@ class TrackingProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ── Permissions ─────────────────────────────────────────────────────────────
+
+  Future<void> checkPermissions() async {
+    try {
+      _hasForegroundPermission =
+          await _permissionService.hasLocationPermission();
+      _hasBackgroundPermission =
+          await _permissionService.hasBackgroundPermission();
+      notifyListeners();
+    } catch (_) {
+      // Running in unit test or unsupported platform
+    }
+  }
+
+  Future<void> requestPermissions() async {
+    try {
+      _addLog('🛡️ Requesting location permissions…');
+      final result =
+          await _permissionService.requestAllLocationPermissions();
+      _hasForegroundPermission = result.foreground;
+      _hasBackgroundPermission = result.background;
+
+      if (result.foreground) {
+        _addLog('✅ Foreground location granted.');
+      } else {
+        _addLog('⚠️ Foreground location denied.');
+      }
+
+      if (result.background) {
+        _addLog('✅ Background location tracking enabled.');
+      } else {
+        _addLog('ℹ️ Background location not granted (foreground only).');
+      }
+
+      notifyListeners();
+    } catch (e) {
+      _addLog('⚠️ Permission check skipped ($e)');
+    }
+  }
+
+  void setTrackingMode(TrackingMode mode) {
+    if (_trackingMode == mode) return;
+    _trackingMode = mode;
+    _addLog('⚙️ Mode set to: ${mode == TrackingMode.realGps ? "Real GPS" : "Simulated GPS"}');
+    if (_isTracking) {
+      stopTracking();
+      startTracking();
+    } else {
+      notifyListeners();
+    }
+  }
+
   // ── Tracking control ────────────────────────────────────────────────────────
 
-  void startTracking() {
+  Future<void> startTracking() async {
     if (_isTracking) return;
+
+    // If using Real GPS, request permissions first if not yet granted
+    if (_trackingMode == TrackingMode.realGps && !_hasForegroundPermission) {
+      await requestPermissions();
+    }
+
     _isTracking = true;
-    _addLog('▶ Tracking started.');
+    _addLog('▶ Tracking started (${_trackingMode == TrackingMode.realGps ? "Real GPS" : "Simulated"}).');
     notifyListeners();
 
-    _locationSub = _locationService.startTracking().listen(
+    _locationSub = _locationService
+        .startTracking(targetMode: _trackingMode)
+        .listen(
       _onLocationUpdate,
       onError: (e) => _addLog('❌ Location error: $e'),
     );
@@ -143,6 +225,9 @@ class TrackingProvider extends ChangeNotifier {
     }
 
     await _refreshCounts();
+
+    // Append to live route history for map polyline
+    _routeHistory.add(record);
 
     // Keep the last 20 for the list view.
     _recentRecords.insert(0, record);

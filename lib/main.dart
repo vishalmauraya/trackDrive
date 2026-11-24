@@ -6,6 +6,7 @@ import 'services/api_service.dart';
 import 'services/connectivity_service.dart';
 import 'services/database_service.dart';
 import 'services/location_service.dart';
+import 'services/permission_service.dart';
 import 'services/sync_service.dart';
 
 void main() {
@@ -23,12 +24,14 @@ class TrackDriveApp extends StatelessWidget {
         final api = ApiService();
         final conn = ConnectivityService();
         final location = LocationService();
+        final perm = PermissionService();
         final sync = SyncService(db: db, api: api, connectivity: conn);
         final provider = TrackingProvider(
           locationService: location,
           databaseService: db,
           connectivityService: conn,
           syncService: sync,
+          permissionService: perm,
         );
         // Boot async init without blocking the widget tree.
         provider.init();

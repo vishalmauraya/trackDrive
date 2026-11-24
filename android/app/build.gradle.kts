@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.trackdrive.track_drive"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

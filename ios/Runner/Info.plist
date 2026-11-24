@@ -2,6 +2,17 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>TrackDrive requires access to your location to track driving routes and speed.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>TrackDrive requires continuous background location access to record your trip even when the screen is locked or app is minimized.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>TrackDrive requires background location access to continue tracking active trips.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>fetch</string>
+	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

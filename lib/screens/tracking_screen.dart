@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/tracking_provider.dart';
+import '../services/location_service.dart';
 import '../widgets/status_badge.dart';
 import '../widgets/location_card.dart';
 import '../widgets/stats_row.dart';
 import '../widgets/log_panel.dart';
 import '../widgets/location_list.dart';
+import '../widgets/tracking_map.dart';
 
 class TrackingScreen extends StatelessWidget {
   const TrackingScreen({super.key});
@@ -66,6 +68,21 @@ class _Body extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // ── Mode & Permission Bar ─────────────────────────────────────────
+          Consumer<TrackingProvider>(
+            builder: (_, p, __) => _PermissionAndModeBar(provider: p),
+          ),
+          const SizedBox(height: 16),
+
+          // ── Interactive Map (OSM + Polyline + Current Location) ───────────
+          Consumer<TrackingProvider>(
+            builder: (_, p, __) => TrackingMap(
+              latestRecord: p.latestRecord,
+              records: p.routeHistory,
+            ),
+          ),
+          const SizedBox(height: 16),
+
           // ── Current location card ────────────────────────────────────────
           Consumer<TrackingProvider>(
             builder: (_, p, __) => LocationCard(record: p.latestRecord),
@@ -99,6 +116,160 @@ class _Body extends StatelessWidget {
             builder: (_, p, __) => LogPanel(logs: p.logs),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PermissionAndModeBar extends StatelessWidget {
+  final TrackingProvider provider;
+
+  const _PermissionAndModeBar({required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A2635),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.tune, color: Colors.white70, size: 16),
+              const SizedBox(width: 8),
+              const Text(
+                'Mode:',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Spacer(),
+              _ModeChip(
+                label: 'Simulated',
+                icon: Icons.alt_route,
+                isSelected: provider.trackingMode == TrackingMode.simulated,
+                onTap: () => provider.setTrackingMode(TrackingMode.simulated),
+              ),
+              const SizedBox(width: 8),
+              _ModeChip(
+                label: 'Real GPS',
+                icon: Icons.gps_fixed,
+                isSelected: provider.trackingMode == TrackingMode.realGps,
+                onTap: () => provider.setTrackingMode(TrackingMode.realGps),
+              ),
+            ],
+          ),
+          const Divider(height: 16, color: Colors.white10),
+          Row(
+            children: [
+              Icon(
+                provider.hasBackgroundPermission
+                    ? Icons.security
+                    : (provider.hasForegroundPermission
+                        ? Icons.lock_open
+                        : Icons.lock),
+                size: 14,
+                color: provider.hasBackgroundPermission
+                    ? const Color(0xFF00C896)
+                    : (provider.hasForegroundPermission
+                        ? Colors.orangeAccent
+                        : Colors.white38),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  provider.hasBackgroundPermission
+                      ? 'Background Location Granted'
+                      : (provider.hasForegroundPermission
+                          ? 'Foreground Only (Allow All-time in Settings)'
+                          : 'Location Permissions Required'),
+                  style: TextStyle(
+                    color: provider.hasBackgroundPermission
+                        ? const Color(0xFF00C896)
+                        : (provider.hasForegroundPermission
+                            ? Colors.orangeAccent
+                            : Colors.white54),
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+              if (!provider.hasBackgroundPermission)
+                TextButton(
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  onPressed: provider.requestPermissions,
+                  child: const Text(
+                    'Grant',
+                    style: TextStyle(
+                      color: Color(0xFF4A9EFF),
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModeChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _ModeChip({
+    required this.label,
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFF00C896).withValues(alpha: 0.2)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF00C896) : Colors.white24,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 13,
+              color: isSelected ? const Color(0xFF00C896) : Colors.white54,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.white54,
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
