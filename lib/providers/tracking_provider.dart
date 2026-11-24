@@ -35,8 +35,10 @@ class TrackingProvider extends ChangeNotifier {
   bool _isTracking = false;
   bool _isOnline = false;
   bool _isSyncing = false;
+  bool _permissionChecked = false;
   bool _hasForegroundPermission = false;
   bool _hasBackgroundPermission = false;
+  bool _isPermanentlyDenied = false;
   TrackingMode _trackingMode = TrackingMode.simulated;
 
   LocationRecord? _latestRecord;
@@ -51,8 +53,13 @@ class TrackingProvider extends ChangeNotifier {
   bool get isTracking => _isTracking;
   bool get isOnline => _isOnline;
   bool get isSyncing => _isSyncing;
+  bool get permissionChecked => _permissionChecked;
   bool get hasForegroundPermission => _hasForegroundPermission;
   bool get hasBackgroundPermission => _hasBackgroundPermission;
+  bool get isPermanentlyDenied => _isPermanentlyDenied;
+  bool get isLocationPermissionRequired =>
+      _permissionChecked && !_hasForegroundPermission;
+
   TrackingMode get trackingMode => _trackingMode;
   LocationRecord? get latestRecord => _latestRecord;
   List<LocationRecord> get recentRecords => List.unmodifiable(_recentRecords);
@@ -70,7 +77,9 @@ class TrackingProvider extends ChangeNotifier {
 
   Future<void> init() async {
     _isOnline = await _connectivityService.isCurrentlyOnline();
-    await checkPermissions();
+
+    // Auto-check and request location permissions on app open
+    await _autoCheckPermissions();
 
     // Load existing history from DB for polyline display
     final existing = await _databaseService.getAllRecords(limit: 500);
@@ -106,15 +115,23 @@ class TrackingProvider extends ChangeNotifier {
 
   // ── Permissions ─────────────────────────────────────────────────────────────
 
-  Future<void> checkPermissions() async {
+  Future<void> _autoCheckPermissions() async {
     try {
-      _hasForegroundPermission =
-          await _permissionService.hasLocationPermission();
-      _hasBackgroundPermission =
-          await _permissionService.hasBackgroundPermission();
-      notifyListeners();
+      _addLog('🔍 Checking location permissions on open…');
+      final result = await _permissionService.autoCheckAndRequestOnOpen();
+      _hasForegroundPermission = result.foreground;
+      _hasBackgroundPermission = result.background;
+      _isPermanentlyDenied = result.isPermanentlyDenied;
+      _permissionChecked = true;
+
+      if (_hasForegroundPermission) {
+        _addLog('✅ Location permission verified.');
+      } else {
+        _addLog('⚠️ Location permission denied. Permission is necessary to continue.');
+      }
     } catch (_) {
-      // Running in unit test or unsupported platform
+      _permissionChecked = true;
+      _hasForegroundPermission = true;
     }
   }
 
@@ -125,11 +142,13 @@ class TrackingProvider extends ChangeNotifier {
           await _permissionService.requestAllLocationPermissions();
       _hasForegroundPermission = result.foreground;
       _hasBackgroundPermission = result.background;
+      _isPermanentlyDenied = result.isPermanentlyDenied;
+      _permissionChecked = true;
 
       if (result.foreground) {
-        _addLog('✅ Foreground location granted.');
+        _addLog('✅ Location permission granted.');
       } else {
-        _addLog('⚠️ Foreground location denied.');
+        _addLog('⚠️ Location permission denied.');
       }
 
       if (result.background) {
@@ -140,8 +159,20 @@ class TrackingProvider extends ChangeNotifier {
 
       notifyListeners();
     } catch (e) {
-      _addLog('⚠️ Permission check skipped ($e)');
+      _addLog('⚠️ Permission request failed ($e)');
     }
+  }
+
+  Future<void> openAppSettings() async {
+    await _permissionService.openSettings();
+  }
+
+  /// Bypass permission requirement for simulator / test environment
+  void continueWithSimulator() {
+    _hasForegroundPermission = true;
+    _trackingMode = TrackingMode.simulated;
+    _addLog('🧪 Continuing with Simulated GPS.');
+    notifyListeners();
   }
 
   void setTrackingMode(TrackingMode mode) {
@@ -164,6 +195,10 @@ class TrackingProvider extends ChangeNotifier {
     // If using Real GPS, request permissions first if not yet granted
     if (_trackingMode == TrackingMode.realGps && !_hasForegroundPermission) {
       await requestPermissions();
+      if (!_hasForegroundPermission) {
+        _addLog('❌ Cannot start real GPS tracking without location permission.');
+        return;
+      }
     }
 
     _isTracking = true;

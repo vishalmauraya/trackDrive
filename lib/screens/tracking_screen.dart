@@ -8,6 +8,7 @@ import '../widgets/stats_row.dart';
 import '../widgets/log_panel.dart';
 import '../widgets/location_list.dart';
 import '../widgets/tracking_map.dart';
+import '../widgets/permission_required_view.dart';
 
 class TrackingScreen extends StatelessWidget {
   const TrackingScreen({super.key});
@@ -36,7 +37,15 @@ class TrackingScreen extends StatelessWidget {
         ),
         actions: const [_ConnectivityBadge()],
       ),
-      body: const _Body(),
+      body: Consumer<TrackingProvider>(
+        builder: (context, provider, _) {
+          // If permission auto-check ran and location was denied, show blocking permission view
+          if (provider.isLocationPermissionRequired) {
+            return PermissionRequiredView(provider: provider);
+          }
+          return const _Body();
+        },
+      ),
     );
   }
 }
